@@ -82,3 +82,7 @@ Desktop.ini
 *.swp
 coverage/
 .nyc_output/
+
+# Archivos sueltos
+Untitled-*.py
+*.py
