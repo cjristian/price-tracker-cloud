@@ -11,12 +11,24 @@ interface AuthState {
   user: AuthUser | null
 }
 
-const stored = localStorage.getItem('auth')
-const initialState: AuthState = stored ? JSON.parse(stored) : { token: null, user: null }
+function loadAuthState(): AuthState {
+  try {
+    const raw = localStorage.getItem('auth')
+    if (!raw) return { token: null, user: null }
+    const parsed = JSON.parse(raw)
+    if (typeof parsed?.token === 'string' && parsed.user && typeof parsed.user.role === 'string') {
+      return parsed
+    }
+    return { token: null, user: null }
+  } catch {
+    localStorage.removeItem('auth')
+    return { token: null, user: null }
+  }
+}
 
 const authSlice = createSlice({
   name: 'auth',
-  initialState,
+  initialState: loadAuthState(),
   reducers: {
     setCredentials(state, action: PayloadAction<{ token: string; user: AuthUser }>) {
       state.token = action.payload.token
