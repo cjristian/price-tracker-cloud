@@ -86,3 +86,6 @@ coverage/
 # Archivos sueltos
 Untitled-*.py
 *.py
+
+# Claude Code context (local only, not for repo)
+CLAUDE.md
