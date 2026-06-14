@@ -17,13 +17,14 @@ Incluye histórico de precios, alertas de bajada y dashboards analíticos.
 | Mappings | AutoMapper 13.0.1 |
 | Validación | FluentValidation 11.11.0 |
 | Logging | Serilog.AspNetCore 10.0.0 + Serilog.Sinks.Console 6.1.1 |
-| Jobs | BackgroundService (pendiente Fase 4) |
+| Jobs | BackgroundService (`PriceCheckerService`) ✅ |
 | Docs | Swashbuckle.AspNetCore 6.9.0 |
-| Frontend | React 18 · Vite · TypeScript · Redux Toolkit · TailwindCSS · Recharts |
-| HTTP cliente | Axios (con interceptor JWT) |
-| Routing | React Router v6 |
+| Frontend | React 18 · Vite 8 · TypeScript · Redux Toolkit · RTK Query · TailwindCSS 3 · Recharts 2 |
+| HTTP cliente | Axios (custom `axiosBaseQuery` para RTK Query) |
+| Routing | React Router **v6.30.4** (importante: NO v7) |
+| Tests frontend | Vitest 4 · React Testing Library · jsdom |
 | DevOps | Docker · Docker Compose · GitHub Actions · Kubernetes · Azure |
-| Tests | xUnit + Moq 4.20.72 + FluentAssertions 6.12.1 |
+| Tests backend | xUnit + Moq 4.20.72 + FluentAssertions 6.12.1 |
 
 ---
 
@@ -35,8 +36,14 @@ proyecto/
 ├── .gitignore
 ├── docs/
 │   └── superpowers/
-│       ├── specs/2026-06-14-fase3-api-design.md
-│       └── plans/2026-06-14-fase3-api-layer.md
+│       ├── specs/
+│       │   ├── 2026-06-14-fase3-api-design.md
+│       │   ├── 2026-06-14-fase4-background-service-design.md
+│       │   └── 2026-06-14-fase5-frontend-design.md
+│       └── plans/
+│           ├── 2026-06-14-fase3-api-layer.md
+│           ├── 2026-06-14-fase4-background-service.md
+│           └── 2026-06-14-fase5-frontend.md
 ├── backend/
 │   ├── PriceTrackerCloud.sln
 │   ├── PriceTrackerCloud.Domain/
@@ -54,43 +61,68 @@ proyecto/
 │   │   └── DependencyInjection.cs
 │   ├── PriceTrackerCloud.Infrastructure/
 │   │   ├── Auth/
-│   │   │   ├── BCryptPasswordHasher.cs   ← implementa IPasswordHasher
-│   │   │   └── JwtTokenGenerator.cs      ← implementa IJwtTokenGenerator
+│   │   │   ├── BCryptPasswordHasher.cs
+│   │   │   └── JwtTokenGenerator.cs
+│   │   ├── BackgroundServices/
+│   │   │   └── PriceCheckerService.cs   ← Fase 4 ✅
 │   │   ├── Data/
 │   │   │   ├── PriceTrackerDbContext.cs
 │   │   │   ├── DesignTimeDbContextFactory.cs
 │   │   │   ├── Configurations/ (5 entidades + SeedData.cs)
 │   │   │   └── Migrations/ (InitialCreate — generada)
 │   │   ├── Repositories/ (Repository<T>, User, Product, Price, Alert)
+│   │   ├── InternalsVisibleTo.cs        ← expone internals a Tests
 │   │   ├── UnitOfWork.cs
 │   │   └── DependencyInjection.cs
 │   ├── PriceTrackerCloud.API/
 │   │   ├── Controllers/
-│   │   │   ├── AuthController.cs         ← POST /auth/register, POST /auth/login
-│   │   │   ├── ProductsController.cs     ← GET/POST /products, GET /products/{id}
-│   │   │   ├── PricesController.cs       ← GET /prices/history/{productId}
-│   │   │   └── AlertsController.cs       ← GET/POST /alerts, DELETE /alerts/{id}
-│   │   ├── Middleware/
-│   │   │   └── ErrorHandlingMiddleware.cs ← Problem Details RFC 7807
-│   │   ├── DependencyInjection.cs        ← JWT + Swagger + CORS
-│   │   ├── Program.cs                    ← Serilog + pipeline completo
-│   │   └── appsettings.json              ← connection string + JWT settings
+│   │   │   ├── AuthController.cs
+│   │   │   ├── ProductsController.cs
+│   │   │   ├── PricesController.cs
+│   │   │   └── AlertsController.cs
+│   │   ├── Middleware/ErrorHandlingMiddleware.cs
+│   │   ├── DependencyInjection.cs
+│   │   ├── Program.cs
+│   │   └── appsettings.json
 │   └── PriceTrackerCloud.Tests/
-│       ├── Validators/ (Register, CreateProduct, CreateAlert — 13 tests)
-│       ├── Handlers/ (RegisterUser, GetProducts — 7 tests)
-│       └── Infrastructure/ (BCryptPasswordHasher — 4 tests, JwtTokenGenerator — 3 tests)
+│       ├── Validators/ (13 tests)
+│       ├── Handlers/ (7 tests)
+│       ├── Infrastructure/ (7 tests)
+│       └── BackgroundServices/ (2 tests — PriceCheckerService)
 └── frontend/
-    └── src/ (estructura de carpetas lista, código pendiente Fase 5)
+    ├── package.json
+    ├── vite.config.ts
+    ├── tsconfig.json + tsconfig.app.json + tsconfig.node.json
+    ├── tailwind.config.js · postcss.config.js
+    ├── .env.example                      ← VITE_API_URL=http://localhost:5295
+    └── src/
+        ├── main.tsx · App.tsx · index.css · vite-env.d.ts
+        ├── types.ts                       ← interfaces mapeadas de DTOs backend
+        ├── test/setup.ts
+        ├── api/
+        │   ├── axiosBase.ts              ← axios instance + axiosBaseQuery + 401→logout
+        │   └── apiSlice.ts               ← RTK Query, 9 endpoints
+        ├── store/
+        │   ├── authSlice.ts              ← token+user, localStorage seguro
+        │   └── store.ts                  ← configureStore + logoutAndReset()
+        ├── hooks/useAuth.ts
+        └── components/
+            ├── ui/ (Spinner, ErrorMessage)
+            └── layout/
+                ├── ProtectedRoute.tsx    ← redirect a /login?redirect=<ruta>
+                ├── ProtectedRoute.test.tsx  ← 2 tests Vitest ✅
+                ├── Sidebar.tsx           ← PENDIENTE (Task 6)
+                └── Layout.tsx            ← PENDIENTE (Task 6)
 ```
 
-### Regla de dependencias
+### Regla de dependencias (backend)
 ```
 API ──► Application ──► Domain
 Infrastructure ──► Application
 Infrastructure ──► Domain
 ```
-> El Domain NO depende de nada externo. Application NO depende de Infrastructure.
-> La API referencia Infrastructure porque es el Composition Root (donde se cablea el DI).
+> Domain NO depende de nada externo. Application NO depende de Infrastructure.
+> API referencia Infrastructure como Composition Root (DI).
 
 ---
 
@@ -105,6 +137,19 @@ Todas heredan de `BaseEntity` con `Id` de tipo `Guid`.
 | `Store` | Name, Website |
 | `ProductPrice` | ProductId (FK), StoreId (FK), Price (decimal), DateCollected |
 | `Alert` | UserId (FK), ProductId (FK), TargetPrice (decimal), IsActive, CreatedAt |
+
+---
+
+## DTOs backend → Tipos frontend
+
+ASP.NET Core serializa a **camelCase** por defecto. Guid → string, decimal → number, DateTime → string ISO 8601.
+
+| DTO backend | Interface TypeScript (`frontend/src/types.ts`) |
+|-------------|-----------------------------------------------|
+| `AuthResponseDto(Token, Name, Email, Role)` | `AuthResponse { token, name, email, role: string }` |
+| `ProductDto(Id, Name, Description, Category)` | `Product { id, name, description, category: string }` |
+| `ProductPriceDto(Id, ProductId, StoreName, Price, DateCollected)` | `ProductPrice { id, productId, storeName: string; price: number; dateCollected: string }` |
+| `AlertDto(Id, ProductId, ProductName, TargetPrice, IsActive, CreatedAt)` | `Alert { id, productId, productName: string; targetPrice: number; isActive: boolean; createdAt: string }` |
 
 ---
 
@@ -139,22 +184,28 @@ El `UserId` en AlertsController se extrae del claim `ClaimTypes.NameIdentifier` 
 - MacBook Pro 14 M3: `b2b2b2b2-0000-0000-0000-000000000003`
 
 36 registros de precios con tendencia bajista (6 snapshots × 2 tiendas × 3 productos).
-La migración se aplica con: `dotnet ef database update --project PriceTrackerCloud.Infrastructure --startup-project PriceTrackerCloud.API`
 
 ---
 
 ## Convenciones de código
 
+### Backend
 - **CQRS:** MediatR. Command = modifica estado. Query = solo lectura. Un handler por command/query.
-- **Validación:** FluentValidation. Un validator por command. El `ValidationBehavior` los ejecuta automáticamente en el pipeline de MediatR antes de llegar al handler.
-- **Mappings:** AutoMapper. Solo en `MappingProfile.cs`. Los handlers que devuelven DTOs inyectan `IMapper`.
-- **Repositorios:** Acceso siempre a través de `IUnitOfWork`. Nunca inyectar repositorios directamente en handlers.
-- **Tests:** xUnit + Moq. Arrange/Act/Assert explícito. Nombres: `Método_Escenario_ResultadoEsperado`.
+- **Validación:** FluentValidation. Un validator por command. `ValidationBehavior` en el pipeline.
+- **Mappings:** AutoMapper. Solo en `MappingProfile.cs`.
+- **Repositorios:** Acceso siempre a través de `IUnitOfWork`. Nunca inyectar repos directamente.
+- **Tests:** xUnit + Moq. Arrange/Act/Assert. Nombres: `Método_Escenario_ResultadoEsperado`.
+- **Errores HTTP:** Problem Details (RFC 7807) vía `ErrorHandlingMiddleware`.
+- **UserId en controllers:** extraer del JWT claim `ClaimTypes.NameIdentifier`, nunca como parámetro.
+
+### Frontend
+- **Estado del servidor:** RTK Query (no thunks manuales). Un `apiSlice` con todos los endpoints.
+- **Estado global:** solo `authSlice` en Redux (token + user). Persistido en localStorage con validación.
+- **Logout:** siempre usar `logoutAndReset()` de `store.ts` — limpia auth + caché RTK Query.
+- **Router:** React Router v6 (NO v7). `ProtectedRoute` usa `<Outlet />` y redirige a `/login?redirect=<ruta>`.
+- **Tests frontend:** Vitest + React Testing Library. Mock con `vi.mock` sobre el módulo, no sobre fetch/axios.
 - **Commits:** Conventional Commits (`feat:`, `fix:`, `chore:`, `test:`, `docs:`).
-- **Secretos:** Nunca en código. `appsettings.json` para placeholders, variables de entorno en producción. `.env.example` en frontend.
-- **Logging:** Serilog → consola únicamente (compatible con Azure App Service y contenedores Docker).
-- **Errores HTTP:** Problem Details (RFC 7807) vía `ErrorHandlingMiddleware`. Nunca lanzar excepciones HTTP directamente desde handlers.
-- **UserId en controllers:** siempre extraer del JWT claim `ClaimTypes.NameIdentifier`, nunca como parámetro de la request.
+- **Secretos:** `.env.example` en frontend (nunca `.env` en git). Variables como `VITE_API_URL`.
 
 ---
 
@@ -162,77 +213,163 @@ La migración se aplica con: `dotnet ef database update --project PriceTrackerCl
 
 | Fase | Estado | Resultado |
 |------|--------|-----------|
-| 0 | ✅ Completada | Esqueleto, CLAUDE.md, .gitignore, solución .sln con 4 proyectos y referencias |
-| 1 | ✅ Completada | Entidades Domain, EF Core + Npgsql, Fluent API, repositorios, UoW, migración + seed |
-| 2 | ✅ Completada | DTOs, interfaces, Commands/Queries + handlers, validators, AutoMapper, pipeline, 20 tests |
-| 3 | ✅ Completada | API: Program.cs, DI completo, JWT, BCrypt, controllers, middleware errores, Swagger, Serilog |
-| 4 | **Siguiente** | BackgroundService que revisa precios y dispara alertas (log con Serilog) |
-| 5 | Pendiente | Frontend: Vite + React + TS + Tailwind + Redux Toolkit + páginas + conexión API |
+| 0 | ✅ Completada | Esqueleto, CLAUDE.md, .gitignore, solución .sln con 4 proyectos |
+| 1 | ✅ Completada | Entidades Domain, EF Core + Npgsql, repos, UoW, migración + seed |
+| 2 | ✅ Completada | DTOs, Commands/Queries + handlers, validators, AutoMapper, pipeline, 20 tests |
+| 3 | ✅ Completada | API: Program.cs, DI, JWT, BCrypt, controllers, middleware, Swagger, Serilog |
+| 4 | ✅ Completada | `PriceCheckerService` (BackgroundService): simula precios ±10%, dispara alertas, Serilog. 29/29 tests |
+| 5 | 🔄 **En progreso** | Frontend React — Tasks 1-5 completas, Task 6 parcial (ver abajo) |
 | 6 | Pendiente | Dockerfile backend/frontend + docker-compose.yml (3 servicios) |
 | 7 | Pendiente | GitHub Actions CI/CD + manifiestos Kubernetes para Azure |
-| 8 | Opcional | Elegir: scraper de precios / roles admin completos / Redis cache |
+| 8 | Opcional | Scraper de precios / roles admin / Redis cache |
+
+---
+
+## Estado de Fase 5 — Frontend (sesión 2026-06-14)
+
+**Plan:** `docs/superpowers/plans/2026-06-14-fase5-frontend.md`
+
+| Task | Estado | Commit |
+|------|--------|--------|
+| 1 — Scaffold Vite + Tailwind + Vitest | ✅ | `4a6f001`, `7f1ac80`, `ed438b1` |
+| 2 — types.ts | ✅ | `1cd155c` |
+| 3 — authSlice + store + useAuth | ✅ | `2200612`, `110b339` |
+| 4 — axiosBase + apiSlice RTK Query | ✅ | `b1c8b77` |
+| 5 — Spinner + ErrorMessage | ✅ | `036d5e8` |
+| 6 — ProtectedRoute (TDD) + Sidebar + Layout | 🔄 parcial | ProtectedRoute.tsx + test hechos, **Sidebar.tsx y Layout.tsx PENDIENTES** |
+| 7 — App.tsx + main.tsx routing | ⏳ pendiente | — |
+| 8 — LoginPage (TDD) | ⏳ pendiente | — |
+| 9 — RegisterPage | ⏳ pendiente | — |
+| 10 — DashboardPage | ⏳ pendiente | — |
+| 11 — ProductsPage | ⏳ pendiente | — |
+| 12 — ProductDetailPage (Recharts) | ⏳ pendiente | — |
+| 13 — CreateProductPage | ⏳ pendiente | — |
+| 14 — AlertsPage | ⏳ pendiente | — |
+| 15 — Verificación final | ⏳ pendiente | — |
+
+**Para retomar en la próxima sesión:**
+1. Lee este CLAUDE.md para contexto completo
+2. El plan de implementación está en `docs/superpowers/plans/2026-06-14-fase5-frontend.md`
+3. Continuar desde **Task 6** (completar Sidebar.tsx y Layout.tsx)
+4. Usar `superpowers:subagent-driven-development` para ejecutar el plan task por task
+5. Antes de ejecutar Task 6, notar que `logoutAndReset()` ya existe en `store.ts` (se añadió como fix de seguridad) — Sidebar debe importarlo de `../../store/store` directamente, sin usar dispatch
 
 ---
 
 ## Criterios de aceptación globales
-- `dotnet run` (desde `backend/PriceTrackerCloud.API`) arranca el backend sin errores ✅
-- Swagger accesible en `/swagger` con botón "Authorize" para JWT ✅
-- Login JWT funcionando contra la base de datos real
-- `npm run dev` (desde `frontend/`) arranca el frontend
-- `docker compose up` levanta los 3 servicios end-to-end
-- `dotnet test` → todos los tests en verde ✅ (27/27)
+- `dotnet run` (desde `backend/PriceTrackerCloud.API`) arranca sin errores ✅
+- Swagger en `/swagger` con botón Authorize JWT ✅
+- `dotnet test` → 29/29 tests en verde ✅
+- `npm run dev` (desde `frontend/`) arranca el frontend ← pendiente completar Fase 5
+- `docker compose up` levanta los 3 servicios ← Fase 6
+- `dotnet test` frontend → tests en verde ← parcial (2 tests ProtectedRoute escritos pero pendientes de correr)
+
+---
+
+## Estado actual del build y tests
+```
+Backend:
+  dotnet build PriceTrackerCloud.sln  →  Build succeeded. 0 Error(s)
+  dotnet test PriceTrackerCloud.sln   →  Total: 29  Passed: 29  Failed: 0
+  dotnet run (API)                    →  http://localhost:5295, Swagger en /swagger
+
+Frontend (parcial):
+  npm run build   →  0 TypeScript errors, bundle generado ✅
+  npm run test    →  2 tests ProtectedRoute escritos, pendiente ejecutar con Sidebar+Layout
+  npm run dev     →  arranca en http://localhost:5173 (sin páginas reales aún)
+```
+
+**Para levantar el backend completo:**
+```bash
+docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=pricetracker postgres:16
+cd backend
+dotnet ef database update --project PriceTrackerCloud.Infrastructure --startup-project PriceTrackerCloud.API
+dotnet run --project PriceTrackerCloud.API
+```
 
 ---
 
 ## Decisiones técnicas tomadas y su justificación
 
-### 1. MediatR para CQRS (en lugar de implementación manual)
-**Decisión:** usar `MediatR 12.4.1`.
-**Por qué esta y no otra:** MediatR es el estándar de facto en .NET para CQRS. Aporta el pipeline de behaviors (usado para validación automática con `ValidationBehavior`), desacopla completamente los handlers de los controllers, y es lo que verán en cualquier empresa o código .NET profesional. Una implementación manual añadiría código de fontanería sin valor académico.
+### 1. MediatR para CQRS
+**Decisión:** `MediatR 12.4.1`.
+**Por qué:** estándar de facto en .NET para CQRS. Aporta pipeline de behaviors (validación automática), desacopla handlers de controllers. Una implementación manual añadiría código de fontanería sin valor académico.
 
 ### 2. IPasswordHasher e IJwtTokenGenerator como interfaces en Application
-**Decisión:** definir las interfaces en Application, implementarlas en Infrastructure.
-**Por qué:** el hash de contraseñas y la generación de JWT son detalles de infraestructura (BCrypt, `System.IdentityModel.Tokens.Jwt`). Ponerlos como interfaces en Application permite testear los handlers con Moq sin depender de librerías externas. Es la aplicación directa del principio de inversión de dependencias.
+**Decisión:** interfaces en Application, implementaciones en Infrastructure.
+**Por qué:** permite testear handlers con Moq sin depender de BCrypt o JWT. Principio de inversión de dependencias.
 
 ### 3. UnitOfWork como punto de acceso a repositorios
-**Decisión:** los handlers solo inyectan `IUnitOfWork`, nunca repositorios individuales.
-**Por qué:** garantiza que todos los cambios de una operación se salvan en una única transacción (`SaveChangesAsync` se llama una sola vez). Si inyectáramos repositorios individuales, cada uno tendría su propio DbContext y las transacciones serían inconsistentes.
+**Decisión:** handlers inyectan `IUnitOfWork`, nunca repositorios individuales.
+**Por qué:** garantiza que todos los cambios de una operación se salvan en una única transacción (`SaveChangesAsync` una sola vez).
 
-### 4. Guid como tipo de Id en todas las entidades
+### 4. Guid como tipo de Id
 **Decisión:** `Guid` en lugar de `int` autoincremental.
-**Por qué:** los GUIDs permiten generar el Id en el cliente/aplicación antes de persistir. Con `int` autoincremental el Id solo se conoce tras insertar en base de datos, lo que complica los handlers que devuelven el objeto recién creado.
+**Por qué:** permite generar el Id en la aplicación antes de persistir. Con `int` el Id solo se conoce tras insertar en BD.
 
 ### 5. HasData con GUIDs fijos para seed
 **Decisión:** GUIDs hardcodeados en `SeedData.cs` con patrón `a1a1a1a1-...`.
-**Por qué:** EF Core exige que los datos de `HasData` sean completamente deterministas para que las migraciones sean idempotentes. Si se usara `Guid.NewGuid()` en `SeedData`, cada vez que se regenerase la migración los GUIDs cambiarían, corrompiendo los datos existentes en producción.
+**Por qué:** EF Core requiere datos de `HasData` deterministas para migraciones idempotentes. `Guid.NewGuid()` cambiaría en cada regeneración.
 
 ### 6. ValidationBehavior en el pipeline de MediatR
-**Decisión:** validar mediante un `IPipelineBehavior<TRequest, TResponse>` en lugar de validar dentro de cada handler.
-**Por qué:** evita duplicar la llamada al validator en cada handler (DRY). El behavior se registra una sola vez y se ejecuta automáticamente para cualquier request que tenga un validator registrado. Si el validator falla, lanza `ValidationException` antes de que el handler llegue a ejecutarse.
+**Decisión:** `IPipelineBehavior<TRequest, TResponse>` en lugar de validar en cada handler.
+**Por qué:** evita duplicar la llamada al validator en cada handler (DRY). Se registra una vez y ejecuta automáticamente.
 
 ### 7. DesignTimeDbContextFactory en Infrastructure
-**Decisión:** implementar `IDesignTimeDbContextFactory<PriceTrackerDbContext>` en Infrastructure.
-**Por qué:** permite ejecutar `dotnet ef migrations add` sin que PostgreSQL esté corriendo. Sin esta factory, el tooling de EF Core intenta arrancar el proyecto API completo para obtener el DbContext, lo que falla porque no hay base de datos disponible en desarrollo.
+**Decisión:** `IDesignTimeDbContextFactory<PriceTrackerDbContext>` en Infrastructure.
+**Por qué:** permite ejecutar `dotnet ef migrations add` sin PostgreSQL corriendo.
 
-### 8. Swashbuckle.AspNetCore 6.9.0 en lugar de Microsoft.AspNetCore.OpenApi nativo
-**Decisión:** usar Swashbuckle 6.9.0 y eliminar `Microsoft.AspNetCore.OpenApi` del proyecto API.
-**Por qué esta y no otra:** `Microsoft.AspNetCore.OpenApi` (el paquete nativo de .NET 9) usa `Microsoft.OpenApi` 1.x, mientras que Swashbuckle 10.x arrastró `Microsoft.OpenApi` 2.x que tiene breaking changes de namespace (`Microsoft.OpenApi.Models` dejó de existir). La combinación de ambos en el mismo proyecto causa conflictos de versión irresolubles. Swashbuckle 6.9.0 usa `Microsoft.OpenApi` 1.x, es la versión más estable y ampliamente documentada, y tiene soporte completo para la definición de seguridad Bearer que necesitamos para documentar la autenticación JWT en la UI de Swagger.
+### 8. Swashbuckle 6.9.0 en lugar de Microsoft.AspNetCore.OpenApi nativo
+**Decisión:** Swashbuckle 6.9.0, sin `Microsoft.AspNetCore.OpenApi`.
+**Por qué:** Swashbuckle 10.x usa `Microsoft.OpenApi` 2.x que eliminó el namespace `Microsoft.OpenApi.Models`. Swashbuckle 6.9.0 usa 1.x donde todo funciona. Los dos paquetes juntos generan conflictos irresolubles.
 
-### 9. Serilog → consola únicamente (sin fichero)
-**Decisión:** `Serilog.Sinks.Console` únicamente, sin `Serilog.Sinks.File`.
-**Por qué:** el proyecto se desplegará en Azure (App Service o contenedores). En Azure, los ficheros de log locales no persisten entre reinicios del contenedor y no son fácilmente accesibles. Azure captura stdout/stderr automáticamente en Log Stream, por lo que escribir a consola es la estrategia correcta y más sencilla. Añadir un sink de fichero solo aportaría complejidad sin valor en este contexto.
+### 9. Serilog → consola únicamente
+**Decisión:** `Serilog.Sinks.Console` sin `Serilog.Sinks.File`.
+**Por qué:** en Azure/contenedores los ficheros locales no persisten. Azure captura stdout/stderr en Log Stream automáticamente.
 
-### 10. ErrorHandlingMiddleware captura InvalidOperationException → 409 Conflict
-**Decisión:** mapear `InvalidOperationException` a HTTP 409 (además de los tipos del spec original).
-**Por qué:** `RegisterUserCommandHandler` lanza `InvalidOperationException` cuando el email ya está registrado. Sin este mapeo, un intento de registro con email duplicado devolvería 500. El 409 Conflict es el código semánticamente correcto para "el recurso ya existe". Se añadió durante la implementación al revisar los handlers existentes.
+### 10. ErrorHandlingMiddleware captura InvalidOperationException → 409
+**Decisión:** mapear `InvalidOperationException` a HTTP 409 Conflict.
+**Por qué:** `RegisterUserCommandHandler` lanza esta excepción para email duplicado. Sin el mapeo devolvería 500.
 
 ### 11. System.IdentityModel.Tokens.Jwt añadido explícitamente a Infrastructure
-**Decisión:** añadir `System.IdentityModel.Tokens.Jwt 8.0.1` como dependencia directa de Infrastructure.
-**Por qué:** `JwtTokenGenerator` vive en Infrastructure y usa `JwtSecurityToken`, `JwtSecurityTokenHandler`, `SigningCredentials`, etc. Aunque `Microsoft.AspNetCore.Authentication.JwtBearer` trae este paquete transitivamente en el proyecto API, Infrastructure no referencia API (violación de la regla de dependencias), así que necesita la referencia directa. Se usa la versión 8.0.1 que es la que trae transitivamente JwtBearer 9.0.5, garantizando compatibilidad.
+**Decisión:** `System.IdentityModel.Tokens.Jwt 8.0.1` referencia directa en Infrastructure.
+**Por qué:** `JwtTokenGenerator` vive en Infrastructure. El paquete llegaba transitivamente solo al proyecto API, y Infrastructure no referencia API (violación de reglas de dependencia).
 
 ### 12. Microsoft.Extensions.Configuration.Json añadido a Tests
-**Decisión:** añadir `Microsoft.Extensions.Configuration.Json` al proyecto Tests.
-**Por qué:** los tests de `JwtTokenGenerator` necesitan construir una `IConfiguration` con `ConfigurationBuilder` + `AddInMemoryCollection()` para inyectar los `JwtSettings` sin depender de archivos de configuración externos. Este paquete no estaba en el proyecto Tests porque en Fases 1-2 no había tests que necesitaran configuración. Se añade en Fase 3 al aparecer el primer test de Infrastructure que necesita configuración.
+**Decisión:** `Microsoft.Extensions.Configuration.Json` en el proyecto Tests.
+**Por qué:** los tests de `JwtTokenGenerator` necesitan `ConfigurationBuilder` + `AddInMemoryCollection()`. Este paquete trae transitivamente el base y las abstractions de una sola vez.
+
+### 13. RTK Query (no thunks manuales) para datos del servidor en frontend
+**Decisión:** `createApi` de RTK Query con un único `apiSlice` y 9 endpoints.
+**Por qué esta y no otra:** RTK Query es el patrón moderno de Redux Toolkit. Gestiona caché, loading states e invalidación automáticamente. Los thunks con `createAsyncThunk` producen el mismo resultado con 3× más código (hay que escribir los reducers pending/fulfilled/rejected a mano). Estado local con `useState/useEffect` no comparte caché entre páginas.
+
+### 14. axiosBaseQuery custom en lugar de fetchBaseQuery de RTK Query
+**Decisión:** implementar un `axiosBaseQuery` propio en `axiosBase.ts` que usa axios.
+**Por qué:** el interceptor de 401 necesita acceder al store para despachar `logout()`. Con `fetchBaseQuery` nativo de RTK Query esto es más difícil de encapsular. Con axios la lógica queda en un único lugar: si el backend devuelve 401, despacha logout automáticamente. Única complejidad: el import circular `axiosBase → store → apiSlice → axiosBase` se resuelve porque el import de `RootState` en axiosBase.ts es `import type` (solo tipos, borrados en runtime).
+
+### 15. logoutAndReset() como función standalone en store.ts
+**Decisión:** exportar `logoutAndReset()` desde `store.ts` que llama tanto a `logout()` como a `apiSlice.util.resetApiState()`.
+**Por qué:** sin resetear el caché de RTK Query al hacer logout, los datos del usuario anterior permanecen en memoria y se muestran al siguiente usuario que inicia sesión. La alternativa (dispatch dentro de un thunk) requiere tipado extra. La función standalone con acceso al singleton del store es la opción más simple. Toda la lógica de logout queda en un punto. Sidebar.tsx llama a `logoutAndReset()` directamente, no a través de dispatch.
+
+### 16. localStorage con validación defensiva para persistir auth
+**Decisión:** `loadAuthState()` con try/catch y validación de tipos antes de deserializar.
+**Por qué:** `JSON.parse()` sin try/catch lanza excepción si localStorage contiene JSON corrupto (puede pasar si el usuario edita manualmente o hay un error de escritura previo). Además, se valida que el objeto parseado tenga la forma esperada (`token: string`, `user.role: string`) — un usuario malintencionado podría editar localStorage para cambiar su rol, pero el backend siempre valida el JWT, así que el daño es solo de UI. La validación de tipos minimiza el riesgo.
+
+### 17. React Router v6 fijado en 6.30.4 (NO v7)
+**Decisión:** `"react-router-dom": "6.30.4"` (pin exacto, no `^7`).
+**Por qué:** npm instala la versión más reciente si no se especifica, que en este momento es v7. React Router v7 introdujo un modo "framework" (tipo Remix) que cambia el API de routing. Aunque el modo "library" de v7 mantiene compatibilidad parcial, la documentación, los ejemplos y la configuración de v7 son diferentes. El plan usa `<BrowserRouter>`, `<Routes>`, `<Route>`, `<NavLink>`, `useNavigate`, `useParams` — todo API de v6. Usar v6 garantiza que cualquier documentación consultada es aplicable.
+
+### 18. vite.config.ts importa de `vitest/config` no de `vite`
+**Decisión:** `import { defineConfig } from 'vitest/config'` en `vite.config.ts`.
+**Por qué:** en Vitest 4.x, importar `defineConfig` de `vite` hace que TypeScript no reconozca el campo `test` del config y genera errores de tipo. `vitest/config` re-exporta `defineConfig` de Vite pero con los tipos de Vitest combinados. Sin esta distinción, el proyecto compila pero el editor muestra errores de tipo en vite.config.ts.
+
+### 19. "types": ["vitest/globals"] en tsconfig.app.json
+**Decisión:** añadir `"types": ["vitest/globals"]` a `compilerOptions` de `tsconfig.app.json`.
+**Por qué:** con `globals: true` en vite.config.ts, Vitest inyecta `describe`, `it`, `test`, `expect`, `vi` como globales. Sin declarar los tipos en tsconfig, `tsc -b` (que corre durante `npm run build`) no reconoce esas variables en los archivos de test y genera `error TS2304: Cannot find name 'describe'`. Este error bloquearía el build en CI.
+
+### 20. VITE_API_URL tipado en vite-env.d.ts
+**Decisión:** declarar `ImportMetaEnv` con `VITE_API_URL: string` en `src/vite-env.d.ts`.
+**Por qué:** sin esta declaración, `import.meta.env.VITE_API_URL` tiene tipo `any`. TypeScript no puede detectar si se usa mal (typos en el nombre, undefined en producción). Con la declaración explícita, el tipo es `string` y el compilador avisa si la variable no existe.
 
 ---
 
@@ -240,81 +377,110 @@ La migración se aplica con: `dotnet ef database update --project PriceTrackerCl
 
 ### P1 — Warning NU1903: AutoMapper 13.0.1 vulnerabilidad conocida
 **Síntoma:** `warning NU1903: Package 'AutoMapper' 13.0.1 has a known high severity vulnerability`.
-**Causa:** CVE reportado en AutoMapper 13.x relacionado con deserialización no tipada.
-**Solución adoptada:** mantener 13.0.1 por ahora. El CVE afecta a un patrón de uso (`Map` dinámico sin tipo destino) que no empleamos en este proyecto — solo usamos `Map<TDestino>(origen)` con tipos explícitos.
-**Qué hacer cuando salga parche:** `dotnet add PriceTrackerCloud.Application package AutoMapper --version X.Y.Z` y verificar que los tests siguen en verde.
-**Por qué no cambiar a otra librería:** Mapster sería la alternativa, pero cambiarla a mitad del proyecto rompe los profiles ya escritos. El riesgo real es nulo con nuestro patrón de uso.
+**Causa:** CVE en AutoMapper 13.x con deserialización no tipada.
+**Solución:** mantener 13.0.1. El CVE afecta a `Map` dinámico sin tipo destino; este proyecto solo usa `Map<TDestino>(origen)` con tipos explícitos. Riesgo real: nulo.
 
-### P2 — dotnet-ef no instalado (primer uso de migraciones)
+### P2 — dotnet-ef no instalado
 **Síntoma:** `dotnet ef` devuelve "command not found".
-**Solución:** `dotnet tool install --global dotnet-ef`. Se instaló la versión 10.0.9.
-**Comando para generar migraciones futuras:**
-```
-dotnet ef migrations add <NombreMigracion> \
-  --project PriceTrackerCloud.Infrastructure/PriceTrackerCloud.Infrastructure.csproj \
-  --startup-project PriceTrackerCloud.API/PriceTrackerCloud.API.csproj \
-  --output-dir Data/Migrations
-```
-**Comando para aplicar migraciones:**
-```
-dotnet ef database update \
-  --project PriceTrackerCloud.Infrastructure/PriceTrackerCloud.Infrastructure.csproj \
-  --startup-project PriceTrackerCloud.API/PriceTrackerCloud.API.csproj
+**Solución:** `dotnet tool install --global dotnet-ef` (versión 10.0.9).
+```bash
+# Generar migración:
+dotnet ef migrations add <Nombre> --project PriceTrackerCloud.Infrastructure/... --startup-project PriceTrackerCloud.API/...
+# Aplicar:
+dotnet ef database update --project PriceTrackerCloud.Infrastructure/... --startup-project PriceTrackerCloud.API/...
 ```
 
-### P3 — Seed de ProductPrice con relaciones FK (HasData)
-**Síntoma:** al usar `HasData` con entidades que tienen navigation properties (`Product`, `Store`), EF Core lanza error porque los navigation properties no pueden estar poblados en el seed.
-**Solución:** en `SeedData.cs` los objetos `ProductPrice` se crean solo con las FK escalares (`ProductId`, `StoreId`), sin asignar las navigation properties. Las navigation properties se cargan en runtime mediante `Include()` en los repositorios.
-**Por qué:** `HasData` trabaja directamente con la tabla, no con el grafo de objetos. EF Core requiere que los datos de seed sean "planos" (solo columnas, sin objetos relacionados).
+### P3 — Seed de ProductPrice con navigation properties en HasData
+**Síntoma:** EF Core lanza error al usar `HasData` con objetos que tienen navigation properties.
+**Causa:** `HasData` trabaja directamente con la tabla, no con el grafo de objetos.
+**Solución:** crear `ProductPrice` solo con FKs escalares (`ProductId`, `StoreId`), sin asignar navigation properties.
 
-### P4 — Microsoft.AspNetCore.Authentication.JwtBearer 10.x incompatible con .NET 9
-**Síntoma:** `error NU1202: Package Microsoft.AspNetCore.Authentication.JwtBearer 10.0.9 is not compatible with net9.0`.
-**Causa:** al instalar `JwtBearer` sin especificar versión, NuGet resuelve la última disponible (10.x) que requiere .NET 10.
-**Solución:** instalar explícitamente la versión 9.x: `dotnet add ... package Microsoft.AspNetCore.Authentication.JwtBearer --version 9.0.5`.
-**Por qué esta versión:** 9.0.5 es la última versión estable del canal .NET 9, compatible con `net9.0`. La regla general es que los paquetes `Microsoft.AspNetCore.*` deben coincidir con el `TargetFramework` del proyecto.
+### P4 — JwtBearer 10.x incompatible con .NET 9
+**Síntoma:** `error NU1202: Package ... 10.0.9 is not compatible with net9.0`.
+**Causa:** NuGet resuelve la última versión (10.x que requiere .NET 10) si no se especifica versión.
+**Solución:** `dotnet add ... package Microsoft.AspNetCore.Authentication.JwtBearer --version 9.0.5`.
 
-### P5 — Swashbuckle.AspNetCore 10.x + Microsoft.OpenApi 2.x: namespace Microsoft.OpenApi.Models inexistente
-**Síntoma:** `error CS0234: The type or namespace name 'Models' does not exist in the namespace 'Microsoft.OpenApi'`.
-**Causa:** Swashbuckle 10.x usa `Microsoft.OpenApi` 2.x como dependencia. En la versión 2.x de `Microsoft.OpenApi`, el namespace `Microsoft.OpenApi.Models` fue reorganizado/eliminado, lo que rompe el código que usa `OpenApiInfo`, `OpenApiSecurityScheme`, etc.
-**Solución:** hacer downgrade de Swashbuckle a la versión 6.9.0, que usa `Microsoft.OpenApi` 1.x donde `Microsoft.OpenApi.Models` existe y funciona con normalidad. Además, eliminar `Microsoft.AspNetCore.OpenApi` (el paquete nativo de .NET 9) del `.csproj` del API porque traía una versión diferente de `Microsoft.OpenApi` que conflictuaba.
-**Por qué no actualizar el código a la API de Microsoft.OpenApi 2.x:** la migración a 2.x implica cambios en todas las definiciones de Swagger (tipos renombrados, constructores diferentes). Swashbuckle 6.9.0 es la versión más documentada y usada en proyectos .NET 8/9, con abundante documentación y ejemplos. No hay ventaja real en usar la 10.x para este proyecto.
+### P5 — Swashbuckle 10.x + Microsoft.OpenApi 2.x: namespace inexistente
+**Síntoma:** `error CS0234: 'Models' does not exist in namespace 'Microsoft.OpenApi'`.
+**Causa:** Swashbuckle 10.x usa Microsoft.OpenApi 2.x que reorganizó/eliminó `Microsoft.OpenApi.Models`.
+**Solución:** downgrade a Swashbuckle 6.9.0 + eliminar `Microsoft.AspNetCore.OpenApi` del .csproj.
 
 ### P6 — System.IdentityModel.Tokens.Jwt no disponible en Infrastructure
-**Síntoma:** `error CS0234: The type or namespace name 'IdentityModel' does not exist in the namespace 'System'` al compilar `JwtTokenGenerator.cs`.
-**Causa:** `JwtTokenGenerator` usa tipos de `System.IdentityModel.Tokens.Jwt` pero Infrastructure no tiene referencia directa a ese paquete. El paquete solo llegaba transitivamente al proyecto API a través de `JwtBearer`, pero Infrastructure no referencia API (ni debe hacerlo).
-**Solución:** añadir `System.IdentityModel.Tokens.Jwt 8.0.1` directamente a Infrastructure: `dotnet add PriceTrackerCloud.Infrastructure package System.IdentityModel.Tokens.Jwt --version 8.0.1`.
-**Por qué la versión 8.0.1:** es la versión que trae transitivamente `Microsoft.AspNetCore.Authentication.JwtBearer 9.0.5`. Usar la misma versión garantiza que no haya conflictos de ensamblado entre los dos proyectos en tiempo de ejecución.
+**Síntoma:** `error CS0234: 'IdentityModel' does not exist in namespace 'System'`.
+**Causa:** el paquete llegaba transitivamente solo al API, que Infrastructure no puede referenciar.
+**Solución:** `dotnet add PriceTrackerCloud.Infrastructure package System.IdentityModel.Tokens.Jwt --version 8.0.1`.
 
-### P7 — ConfigurationBuilder no disponible en proyecto Tests
-**Síntoma:** `error CS0246: The type or namespace name 'ConfigurationBuilder' could not be found` en `JwtTokenGeneratorTests.cs`.
-**Causa:** `ConfigurationBuilder` y `AddInMemoryCollection()` pertenecen a `Microsoft.Extensions.Configuration`, que no estaba referenciado en el proyecto Tests.
+### P7 — ConfigurationBuilder no disponible en Tests
+**Síntoma:** `error CS0246: 'ConfigurationBuilder' could not be found`.
 **Solución:** `dotnet add PriceTrackerCloud.Tests package Microsoft.Extensions.Configuration.Json`.
-**Por qué este paquete y no solo el base:** `Microsoft.Extensions.Configuration.Json` trae transitivamente `Microsoft.Extensions.Configuration` (el base) y `Microsoft.Extensions.Configuration.Abstractions`. Con un solo paquete se cubre todo lo necesario para construir `IConfiguration` en tests. Si solo se añadiera el paquete base, faltarían los extension methods como `AddInMemoryCollection`.
 
 ### P8 — Tests no referenciaban Infrastructure
-**Síntoma:** `error CS0234: The type or namespace name 'Infrastructure' does not exist in the namespace 'PriceTrackerCloud'` al compilar los nuevos tests de Infrastructure.
-**Causa:** el proyecto Tests solo referenciaba Application y Domain (suficiente para las Fases 1-2). Al añadir tests de `BCryptPasswordHasher` y `JwtTokenGenerator` que viven en Infrastructure, el proyecto Tests necesita referencia directa.
+**Síntoma:** `error CS0234: 'Infrastructure' does not exist in namespace 'PriceTrackerCloud'`.
 **Solución:** `dotnet add PriceTrackerCloud.Tests reference PriceTrackerCloud.Infrastructure`.
-**Por qué es aceptable:** en Clean Architecture, los tests de Infrastructure son legítimos (prueban implementaciones concretas como BCrypt o JWT). El proyecto Tests no es parte de la cadena de producción, así que puede referenciar cualquier capa sin violar las reglas de dependencias del código de producción.
+
+### P9 — npm instala react-router-dom v7 en lugar de v6
+**Síntoma (detectado en code review):** `npm install react-router-dom` instaló v7.6.2. El plan usa API de v6.
+**Causa:** npm sin versión especificada instala la última disponible.
+**Solución:** `npm install react-router-dom@^6.28.0` → instaló 6.30.4.
+**Por qué no quedarse en v7:** el API de routing (BrowserRouter, Routes, Route, NavLink, useNavigate, useParams, Outlet) está especificado en el plan con semántica v6. Usar v7 requeriría revisar cada uso y posiblemente cambiar a framework mode. No hay beneficio para un TFG.
+
+### P10 — TypeScript no reconoce globals de Vitest en build
+**Síntoma (detectado en code review):** `tsc -b` genera `error TS2304: Cannot find name 'describe'` en archivos de test.
+**Causa:** `globals: true` en vite.config.ts inyecta globales en runtime pero TypeScript no sabe de ellos sin una declaración de tipos.
+**Solución:** añadir `"types": ["vitest/globals"]` a `compilerOptions` en `tsconfig.app.json`.
+
+### P11 — vite.config.ts con import de `vite` en lugar de `vitest/config`
+**Síntoma:** errores de tipo en `vite.config.ts` — TypeScript no reconoce el campo `test`.
+**Causa:** en Vitest 4.x, `defineConfig` de `vite` no incluye los tipos del bloque `test`.
+**Solución:** cambiar `import { defineConfig } from 'vite'` → `import { defineConfig } from 'vitest/config'`.
+
+### P12 — JSON.parse(localStorage) sin try/catch
+**Síntoma (security review):** `JSON.parse` lanza excepción si localStorage contiene JSON malformado, rompiendo la app al cargar.
+**Causa:** localStorage puede corromperse por errores previos o edición manual del usuario.
+**Solución:** envolver en `loadAuthState()` con try/catch + validación de tipos. Si falla, limpia localStorage y devuelve estado vacío.
+
+### P13 — Caché RTK Query no se limpia al hacer logout
+**Síntoma (security review):** al cerrar sesión con `dispatch(logout())`, los datos del usuario anterior permanecen en el caché de RTK Query y se muestran si un segundo usuario inicia sesión en la misma pestaña.
+**Causa:** `logout()` solo limpia el slice de auth, no el estado de la API.
+**Solución:** crear `logoutAndReset()` en `store.ts` que despacha tanto `logout()` como `apiSlice.util.resetApiState()`. Toda la UI usa `logoutAndReset()` en lugar de `dispatch(logout())`.
 
 ---
 
-## Estado actual del build y tests
-```
-dotnet build PriceTrackerCloud.sln  →  Build succeeded. 0 Error(s)
-dotnet test PriceTrackerCloud.sln   →  Total: 27  Passed: 27  Failed: 0
-dotnet run (API)                    →  Arranca en http://localhost:5295, Swagger en /swagger
+## Archivos de configuración importantes
+
+### frontend/vite.config.ts
+```ts
+import { defineConfig } from 'vitest/config'  // ← vitest/config, NO vite
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './src/test/setup.ts',
+  },
+})
 ```
 
-**Desglose de tests:**
-- Validators/ → 13 tests (Register, CreateProduct, CreateAlert)
-- Handlers/ → 7 tests (RegisterUser, GetProducts)
-- Infrastructure/ → 7 tests (BCryptPasswordHasher × 4, JwtTokenGenerator × 3)
-
-**Nota para próxima sesión:** para probar los endpoints hace falta PostgreSQL corriendo. Levantar con Docker:
-```bash
-docker run -d -p 5432:5432 -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=pricetracker postgres:16
-dotnet ef database update --project backend/PriceTrackerCloud.Infrastructure --startup-project backend/PriceTrackerCloud.API
-dotnet run --project backend/PriceTrackerCloud.API
+### frontend/tsconfig.app.json (compilerOptions clave)
+```json
+{
+  "compilerOptions": {
+    "types": ["vitest/globals"],
+    "strict": true,
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "jsx": "react-jsx"
+  }
+}
 ```
-Luego abrir `http://localhost:5295/swagger`.
+
+### frontend/src/store/store.ts (función clave)
+```ts
+export function logoutAndReset() {
+  store.dispatch(logout())
+  store.dispatch(apiSlice.util.resetApiState())
+  localStorage.removeItem('auth')
+}
+```
